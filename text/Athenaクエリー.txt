@@ -1,0 +1,20 @@
+
+https://ap-northeast-1.console.aws.amazon.com/athena/home?force=&region=ap-northeast-1#query/history/fac9e413-895a-42cc-99d1-953d4f45c092
+
+//テーブル作成
+CREATE EXTERNAL TABLE IF NOT EXISTS ttd.transitionhistoryadfilter_20181009 (
+userid            string,mediaid    string,campaignid string,adgroupid string,
+adGroupCategoryid string,creativeid string,uniqid     string,timestamp bigint,
+referer string,remoteAddr        string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES (
+  'serialization.format' = '    ',
+  'field.delim' = '    '
+) LOCATION 's3://ttd-learning/data/transition_history_filter_imp/2018/10/09/'
+TBLPROPERTIES ('has_encrypted_data'='false');
+
+//ここのlimitを変えればOKです
+SELECT referer FROM ttd.transitionhistoryadfilter_20181009 LIMIT 10
+
+

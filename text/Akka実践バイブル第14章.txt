@@ -1,0 +1,224 @@
+# Akka実践バイブル 第14章
+クラスタリング
+
+## この章で学ぶこと
+- クラスター内のアクターの動的なスケーリング
+- クラスターに対応したルーターによるクラスターへのメッセージ送信
+- クラスタリングされたAkkaのアプリケーションの構築
+
+クラスターを使うと、分散アプリケーションで使用するノード数を動的に増減させることができ、
+単一障害点をなくすことができます。
+
+クラスターが大きいほど、障害の起きる可能性が高まります。
+クラスターのライフサイクルを監視したり制御したりできる完全な手段があります。
+
+14.1では次のことを学ぶ
+- ノードがクラスターのメンバーになる仕組み
+- メンバーシップのイベントをハンドリングする方法
+- クラスター内のノードが障害により停止したことを検知する方法
+
+### 14.1 なぜクラスタリングを用いるか？
+
+クラスターは動的なノードのクループです。
+クラスターはakka-remoteモジュールを利用して構築します。
+クラスタリングは位置透過性のレベルを引き上げます。
+
+
+「分散システムでの透過性とは、分散された構成をユーザーから隠し、あたかも集中型システムであるかのように見せることである。」
+以下のような透過性がある:
+- アクセス透過性
+各ノードでのリソースの実際の配置やアクセス方法はどうであれ、ユーザーから見て分散システムは常に同じリソースアクセス方法を提供すべきである。
+- 位置透過性
+分散システムはユーザーにリソースの配置を意識させるべきではない。
+- マイグレーション透過性
+リソースやプロセスが分散システム内で物理的/論理的に異なる位置に移動できるかどうかをユーザーに意識させるべきではない。
+- リロケーション透過性
+使用中のリソースもユーザーに気づかれずに移動可能であるべきである。
+- 複製透過性
+リソースが複数の位置に複製され配置される場合、ユーザーにはそれらが1つのリソースとして見えるようにすべきである。
+- 並行透過性
+複数のユーザーが1つのリソースを共有して使用するとき、それらユーザーに競合状態を気づかせてはならない。
+- 障害透過性
+リソースやノードの障害をなるべくユーザーから隠して復旧させるよう努めるべきである。
+- 永続透過性
+リソースが永続的な記憶装置にあるか、揮発性の記憶装置にあるかで違いが発生しないようにしなければならない。
+
+クラスターモジュールの最終的な目標は下記の3点を完全に自動化して提供することです。
+- アクターの分散
+- 負荷分散
+- フェイルオーバー
+
+#### クラスターメンバーシップ
+
+耐障害性を持ったアクターシステムのメンバーシップ
+
+#### 負荷分散
+
+ルーティングアルゴリズムに基づいたクラスター内のアクターへのメッセージルーティング
+
+#### ノードパーティショニング
+
+クラスター内のノードに特定のロール(役割)を与え、特定のロールの持つノードにのみメッセージを送信するようにルーターを設定可能
+
+#### パーティションポイント
+
+アクターシステムのアクターをサブツリーに分割(パーティション)し、他のノードに配置可能
+
+## 14.2 クラスターメンバーメンバーシップ
+
+### seed-node(シードノード)はクラスターを起動させるために必要不可欠なノード、クラスターの起点
+
+### ノードはそのノードの一意なアドレスを含んだJoin(参加)メッセージを送信することでクラスターに参加できます。
+
+#### 参考資料
+```
+「Akka Clusterで超レジリエンスを手に入れる」
+https://thinkit.co.jp/article/12171
+
+「Akka Clusterで超レジリエンスを手に入れる（その2）」
+https://thinkit.co.jp/article/12391
+
+「Akka Clusterの耐障害設計」
+https://www.slideshare.net/TanUkkii/akka-cluster-66880662
+
+「Akkaで分散システム入門」
+https://www.slideshare.net/ShingoOmura/akka-90877261
+
+「Akka Documentation Disocovery」
+https://doc.akka.io/docs/akka/current/discovery/index.html
+
+Akkaで実現するステートフルでスケーラブルなアーキテクチャ
+https://www.slideshare.net/yugolf/akka-66885408
+```
+Akka Discoveryを使用することにより、DNS、EC2 Tagからクラスターメンバーを探せる
+```
+libraryDependencies += "com.typesafe.akka" %% "akka-discovery" % "2.5.22"
+```
+
+
+#### シードノードの起動
+p.380
+```
+cd /Users/9044_tateda/workplace/akka-in-action-master/chapter-cluster
+[ターミナル1]> sbt -DPORT=2551 -DHOST=127.0.0.1
+[ターミナル2]> sbt -DPORT=2552 -DHOST=127.0.0.1
+[ターミナル3]> sbt -DPORT=2553 -DHOST=127.0.0.1
+
+[ターミナル1]> console
+
+:paste
+
+import akka.actor._ 
+import akka.cluster._ 
+import com.typesafe.config._ 
+
+val seedConfig = ConfigFactory.load("seed") 
+val seedSystem = ActorSystem("words", seedConfig)
+
+[ターミナル2]> console
+
+:paste
+
+import akka.actor._ 
+import akka.cluster._ 
+import com.typesafe.config._ 
+
+val seedConfig = ConfigFactory.load("seed") 
+val seedSystem = ActorSystem("words", seedConfig)
+
+[ターミナル3]> console
+
+:paste
+
+import akka.actor._ 
+import akka.cluster._ 
+import com.typesafe.config._ 
+
+val seedConfig = ConfigFactory.load("seed") 
+val seedSystem = ActorSystem("words", seedConfig)
+
+```
+※上記のターミナルはそれぞれEnterでREPLに戻ります。
+
+
+
+## 14.3 クラスターからの離脱
+離脱
+```
+val address = Cluster(seedSystem).selfAddress
+
+Cluster(seedSystem).leave(address)
+
+```
+
+
+再参加
+```
+seedSystem.terminate()
+
+val seedSystem = ActorSystem("words", seedConfig)
+```
+p.385
+
+1番目のターミナルを終了させて、2番目のターミナルに出力されてのは下記のとおりであるため、書籍の記述とは異なるが、
+failure detectorが正常に動いていることはわかる。
+```
+Cluster Node [akka.tcp://words@127.0.0.1:2552] - Exiting confirmed [akka.tcp://words@127.0.0.1:2551]
+Cluster Node [akka.tcp://words@127.0.0.1:2552] - Leader is removing confirmed Exiting node [akka.tcp://words@127.0.0.1:2551]
+```
+
+```
+[ターミナル1]> sbt -DPORT=2551 -DHOST=127.0.0.1
+
+console
+
+:paste
+
+import akka.actor._ 
+import akka.cluster._ 
+import com.typesafe.config._ 
+
+val seedConfig = ConfigFactory.load("seed") 
+val seedSystem = ActorSystem("words", seedConfig)
+
+
+val address = Address("akka.tcp", "words", "127.0.0.1", 2551)
+Cluster(seedSystem).down(address)
+
+```
+
+akka.cluster.auto-down-unreachable-afterは、seed.confに下記のように設定
+```
+  cluster {
+    seed-nodes = [
+      "akka.tcp://ClusterSystem@127.0.0.1:2551",
+      "akka.tcp://ClusterSystem@127.0.0.1:2552"]
+
+    # auto downing is NOT safe for production deployments.
+    # you may want to use it during development, read more about it in the docs.
+    #
+    # auto-down-unreachable-after = 10s
+  }
+```
+https://doc.akka.io/docs/akka/2.5.3/scala/cluster-usage.html
+
+
+### 14.4.1 クラスターの起動
+
+```
+java -DPORT=2551 -Dconfig.resource=/seed.conf   -jar target/words-node.jar
+java -DPORT=2554 -Dconfig.resource=/master.conf -jar target/words-node.jar
+java -DPORT=2555 -Dconfig.resource=/worker.conf -jar target/words-node.jar
+java -DPORT=2556 -Dconfig.resource=/worker.conf -jar target/words-node.jar
+
+
+```
+
+
+
+
+
+
+
+
+

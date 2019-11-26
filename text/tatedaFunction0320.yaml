@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'Performs a periodic check of the given site, erroring out on test failure.'
+Resources:
+  tatedaFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: 'jp.co.interspace.xlift.Queueing::handleRequest'
+      Runtime: java8
+      CodeUri: .
+      Description: >-
+        Performs a periodic check of the given site, erroring out on test
+        failure.
+      MemorySize: 1024
+      Timeout: 900
+      Role: 'arn:aws:iam::165105907046:role/lambda_tateda_execution'
+      Events:
+        Schedule1:
+          Type: Schedule
+          Properties:
+            Schedule: cron(36 3 * * ? *)
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-c90a1bb1
+        SubnetIds:
+          - subnet-0a883ebd911d5b3fb
+          - subnet-00724c20244c61847
+      Environment:
+        Variables:
+          widgetIds: ''
+      Tags:
+        'lambda-console:blueprint': lambda-canary
